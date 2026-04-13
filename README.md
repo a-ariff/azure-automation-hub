@@ -1,157 +1,182 @@
-# 🚀 Azure Automation Hub
+Azure Automation Hub
 
-[![Azure](https://img.shields.io/badge/Azure-Automation-blue?style=flat-square&logo=microsoft-azure)](https://azure.microsoft.com/)
-[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?style=flat-square&logo=powershell)](https://docs.microsoft.com/powershell/)
-[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![Contributions Welcome](https://img.shields.io/badge/Contributions-Welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
-[![GitHub stars](https://img.shields.io/github/stars/a-ariff/azure-automation-hub?style=flat-square)](https://github.com/a-ariff/azure-automation-hub/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/a-ariff/azure-automation-hub?style=flat-square)](https://github.com/a-ariff/azure-automation-hub/network)
+[Azure] [PowerShell] [Microsoft Graph] [CI] [License: MIT]
 
-> **Comprehensive Azure automation scripts and runbooks for user management, device monitoring, and enterprise IT operations**
+Production-ready PowerShell runbooks for Azure Automation. Covers user lifecycle management, Intune device compliance, security posture reporting, and license utilisation – built for MSP and enterprise environments using Microsoft Graph exclusively (no deprecated AzureAD module).
 
-## 📋 Overview
+Table of Contents
 
-The Azure Automation Hub is a centralized repository containing production-ready PowerShell runbooks, ARM/Bicep templates, and automation scripts designed for enterprise Azure environments. This collection focuses on streamlining common IT operations, user lifecycle management, device compliance monitoring, and automated reporting.
+- Architecture
+- What is in this repo
+- Runbook reference
+- Authentication
+- Setup
+- Schedule recommendations
+- Dependencies
+- Contributing
 
-## ✨ Key Features
+Architecture
 
-### 👥 User Management Automation
-- **Automated User Provisioning**: Create users across Active Directory and Azure AD
-- **Bulk User Operations**: Mass user creation, updates, and deprovisioning
-- **Group Management**: Automated security group assignments and management
-- **License Assignment**: Automated Microsoft 365 license distribution
-- **Offboarding Workflows**: Complete user deprovisioning with audit trails
+    Azure Automation Account (Managed Identity)
+      |
+      +-- Microsoft Graph API
+      |     |
+      |     +-- Entra ID (users, groups, roles, PIM)
+      |     +-- Intune (devices, compliance, sync)
+      |     +-- Exchange Online (mailbox conversion)
+      |     +-- Security (secure score, CA policies)
+      |     +-- Reports (MFA registration, licenses)
+      |
+      +-- Log Analytics Workspace
+      |     |
+      |     +-- Runbook logs and diagnostics
+      |
+      +-- Schedules
+            |
+            +-- Daily: compliance reports
+            +-- Weekly: license utilisation
+            +-- On-demand: user offboarding, remediation
 
-### 📱 Device Monitoring & Compliance
-- **Device Health Monitoring**: Real-time device status and compliance checking
-- **Intune Integration**: Device enrollment and policy compliance automation
-- **Security Baseline Enforcement**: Automated security configuration deployment
-- **Patch Management**: Automated update deployment and reporting
-- **Inventory Tracking**: Comprehensive device and software inventory
+What is in this repo
 
-### 📊 Automated Reporting
-- **Azure Cost Analysis**: Automated cost reporting and optimization recommendations
-- **Security Compliance Reports**: Regular compliance status and audit reports
-- **User Activity Analytics**: Login patterns and usage statistics
-- **Device Utilization Reports**: Hardware usage and lifecycle management
-- **Custom Dashboard Creation**: Automated Power BI dashboard updates
+    azure-automation-hub/
+      runbooks/
+        user-management/
+          New-AzureADUser.ps1               -- create user with groups and license
+          Remove-AzureADUser.ps1            -- full offboarding workflow
+          Set-BulkLicenseAssignment.ps1     -- bulk license assign/swap from CSV or group
+        device-compliance/
+          Get-NonCompliantDevices.ps1       -- compliance and inactivity report
+          Invoke-IntuneRemediation.ps1      -- force sync on non-compliant devices
+        reporting/
+          Get-AzureSecurityReport.ps1       -- secure score, PIM, CA, MFA report
+          Get-M365LicenseReport.ps1         -- license utilisation with capacity alerts
+      modules/
+        bicep/
+          automation-account.bicep          -- deploy the full automation infrastructure
+      .github/
+        workflows/
+          lint.yml                          -- PSScriptAnalyzer + Bicep validation
 
-### 🏗️ Infrastructure as Code
-- **ARM Templates**: Reusable infrastructure deployment templates
-- **Bicep Modules**: Modern infrastructure-as-code implementations
-- **Resource Group Management**: Automated resource organization
-- **Policy Assignments**: Governance and compliance policy automation
-- **Tag Management**: Consistent resource tagging strategies
+Runbook reference
 
-## 📁 Repository Structure
+  -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  Runbook                         Purpose                                                                                     Key Graph permissions
+  ------------------------------- ------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------
+  New-AzureADUser.ps1             Provision a new user with group and license assignment                                      User.ReadWrite.All, Group.ReadWrite.All
 
-```
-azure-automation-hub/
-├── 📂 runbooks/              # PowerShell automation runbooks
-│   ├── user-management/      # User lifecycle automation
-│   ├── device-monitoring/    # Device compliance & monitoring
-│   └── reporting/           # Automated reporting scripts
-├── 📂 device-monitoring/     # Device monitoring solutions
-│   ├── intune-scripts/      # Microsoft Intune automation
-│   ├── compliance-checks/   # Device compliance validation
-│   └── inventory/          # Asset tracking and inventory
-├── 📂 templates/            # ARM & Bicep templates
-│   ├── arm/                # Azure Resource Manager templates
-│   ├── bicep/              # Bicep infrastructure modules
-│   └── policies/           # Azure Policy definitions
-├── 📂 docs/                # Documentation and guides
-│   ├── getting-started/    # Setup and configuration guides
-│   ├── best-practices/     # Implementation best practices
-│   └── troubleshooting/    # Common issues and solutions
-└── 📂 examples/            # Sample implementations and demos
-    ├── quick-start/        # Ready-to-use examples
-    └── advanced/           # Complex scenario implementations
-```
+  Remove-AzureADUser.ps1          Disable account, revoke sessions, remove groups/licenses, convert mailbox, notify manager   User.ReadWrite.All, Group.ReadWrite.All, Mail.Send, Directory.ReadWrite.All
 
-## 🚀 Quick Start
+  Set-BulkLicenseAssignment.ps1   Assign or swap licenses in bulk from CSV or Entra group                                     User.ReadWrite.All, Group.Read.All, Directory.Read.All
 
-### Prerequisites
-- Azure subscription with appropriate permissions
-- Azure Automation Account
-- PowerShell 5.1 or later
-- Azure PowerShell module installed
-- Microsoft Graph PowerShell SDK (for Azure AD operations)
+  Get-NonCompliantDevices.ps1     Report on non-compliant and inactive Intune devices                                         DeviceManagementManagedDevices.Read.All
 
-### Basic Setup
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/a-ariff/azure-automation-hub.git
-   cd azure-automation-hub
-   ```
+  Invoke-IntuneRemediation.ps1    Trigger device sync for non-compliant devices                                               DeviceManagementManagedDevices.ReadWrite.All
 
-2. **Import runbooks to Azure Automation**:
-   - Navigate to your Azure Automation Account
-   - Import desired runbooks from the `/runbooks` folder
-   - Configure required variables and credentials
+  Get-AzureSecurityReport.ps1     Security posture: secure score, PIM, Conditional Access, MFA                                SecurityEvents.Read.All, Policy.Read.All, RoleManagement.Read.Directory, Reports.Read.All
 
-3. **Deploy templates**:
-   ```bash
-   # Deploy ARM template
-   az deployment group create --resource-group myRG --template-file templates/arm/user-management.json
-   
-   # Deploy Bicep template
-   az deployment group create --resource-group myRG --template-file templates/bicep/monitoring.bicep
-   ```
+  Get-M365LicenseReport.ps1       License utilisation with 90%+ capacity warnings                                             Directory.Read.All, Organization.Read.All
+  -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## 🔧 Configuration
+Authentication
 
-### Required Azure Automation Variables
-```powershell
-# User Management
-TenantId              # Azure AD Tenant ID
-SubscriptionId        # Azure Subscription ID
-ResourceGroupName     # Target Resource Group
+Managed Identity (recommended): All runbooks connect with Connect-MgGraph -Identity. The Automation Account’s system-assigned managed identity needs the Graph permissions listed above.
 
-# Notification Settings
-NotificationEmail     # Alert recipient email
-SMTPServer           # SMTP server for notifications
-TeamsWebhookURL      # Microsoft Teams webhook URL
-```
+Service Principal (alternative): For local testing or environments without managed identity support, use Connect-MgGraph -ClientId ... -TenantId ... -CertificateThumbprint ....
 
-### Required Credentials
-- **Azure Service Principal**: For Azure resource management
-- **Microsoft Graph API**: For Azure AD operations
-- **Exchange Online**: For mailbox management (if applicable)
+Grant Graph API permissions to the managed identity after deployment:
 
-## 📚 Documentation
+    # get the managed identity service principal
+    $mi = Get-MgServicePrincipal -Filter "displayName eq 'aa-automation-hub'"
 
-- [🏃 Getting Started Guide](./docs/getting-started/README.md)
-- [⚡ Runbook Documentation](./docs/runbooks/README.md)
-- [🏗️ Template Usage Guide](./docs/templates/README.md)
-- [🔧 Configuration Reference](./docs/configuration/README.md)
-- [🛠️ Troubleshooting Guide](./docs/troubleshooting/README.md)
+    # get the Graph service principal
+    $graph = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
 
-## 🤝 Contributing
+    # assign User.ReadWrite.All (example)
+    $role = $graph.AppRoles | Where-Object { $_.Value -eq 'User.ReadWrite.All' }
+    New-MgServicePrincipalAppRoleAssignment `
+        -ServicePrincipalId $mi.Id `
+        -PrincipalId $mi.Id `
+        -ResourceId $graph.Id `
+        -AppRoleId $role.Id
 
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
+Setup
 
-### Development Workflow
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1.  Deploy the infrastructure using the Bicep module:
 
-## 📝 License
+    az deployment group create \
+        --resource-group rg-automation \
+        --template-file modules/bicep/automation-account.bicep \
+        --parameters automationAccountName='aa-automation-hub' \
+                     logAnalyticsWorkspaceId='/subscriptions/.../workspaces/law-001'
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+2.  Grant Graph permissions to the managed identity (see Authentication section above).
 
-## 🆘 Support
+3.  Import runbooks – either through the Azure Portal or via CI/CD. The Bicep module creates runbook resource stubs; upload the actual .ps1 content:
 
-- 📚 Check the [Documentation](./docs/) for detailed guides
-- 🐛 Report bugs via [GitHub Issues](https://github.com/a-ariff/azure-automation-hub/issues)
-- 💬 Join discussions in [GitHub Discussions](https://github.com/a-ariff/azure-automation-hub/discussions)
-- 📧 Email support: [support@example.com](mailto:support@example.com)
+    az automation runbook replace-content \
+        --resource-group rg-automation \
+        --automation-account-name aa-automation-hub \
+        --name Remove-AzureADUser \
+        --content @runbooks/user-management/Remove-AzureADUser.ps1
 
-## ⭐ Show Your Support
+4.  Link schedules to runbooks and configure Automation variables (TenantId, NotificationEmail, AutomationMailbox).
 
-If this project helps you, please give it a ⭐ star on GitHub!
+Schedule recommendations
 
----
+  ----------------------------------------------------------------------------------------------
+  Runbook                     Frequency                    Notes
+  --------------------------- ---------------------------- -------------------------------------
+  Get-NonCompliantDevices     Daily 06:00 UTC              Catches overnight drift
 
-**Made with ❤️ for the Azure community**
+  Get-M365LicenseReport       Weekly Monday 07:00 UTC      License reconciliation
+
+  Get-AzureSecurityReport     Weekly Friday 08:00 UTC      End-of-week security review
+
+  Invoke-IntuneRemediation    Daily 12:00 UTC              Post-compliance-report sync
+
+  Remove-AzureADUser          On-demand                    Triggered by ITSM or HR workflow
+
+  Set-BulkLicenseAssignment   On-demand                    Triggered by licence true-up events
+  ----------------------------------------------------------------------------------------------
+
+Dependencies
+
+  -------------------------------------------------------------------------------------------------------------------------
+  Module                                         Version                  Purpose
+  ---------------------------------------------- ------------------------ -------------------------------------------------
+  Microsoft.Graph.Users                          >= 2.0.0                 User CRUD, license management
+
+  Microsoft.Graph.Groups                         >= 2.0.0                 Group membership operations
+
+  Microsoft.Graph.Identity.DirectoryManagement   >= 2.0.0                 SKU and role queries
+
+  Microsoft.Graph.Identity.SignIns               >= 2.0.0                 Conditional Access, MFA reports
+
+  Microsoft.Graph.Identity.Governance            >= 2.0.0                 PIM role assignments
+
+  Microsoft.Graph.Security                       >= 2.0.0                 Secure score
+
+  Microsoft.Graph.DeviceManagement               >= 2.0.0                 Intune device queries and actions
+
+  Microsoft.Graph.Users.Actions                  >= 2.0.0                 Revoke sessions, send mail
+
+  Az.Accounts                                    >= 2.12.0                Azure authentication (used by Bicep deployment)
+
+  ExchangeOnlineManagement                       >= 3.2.0                 Mailbox conversion (optional, offboarding only)
+
+  PSScriptAnalyzer                               >= 1.21.0                CI linting (dev dependency only)
+  -------------------------------------------------------------------------------------------------------------------------
+
+Contributing
+
+1.  Fork the repository
+2.  Create a feature branch
+3.  Run PSScriptAnalyzer locally: Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error,Warning
+4.  Open a pull request – the lint workflow validates automatically
+
+License
+
+MIT – see LICENSE for details.
+
+Back to top

@@ -1,0 +1,113 @@
+name: Lint and Validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.ps1'
+      - '**.bicep'
+      - '.github/workflows/lint.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.ps1'
+      - '**.bicep'
+
+jobs:
+  # -----------------------------------------------------------------------
+  # PSScriptAnalyzer lint for all PowerShell scripts
+  # -----------------------------------------------------------------------
+  powershell-lint:
+    name: PowerShell Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path . -Filter '*.ps1' -Recurse
+          Write-Host "Found $($files.Count) PowerShell files to analyse"
+
+          $allResults = @()
+          foreach ($file in $files) {
+              Write-Host "Analysing: $($file.FullName)"
+              $results = Invoke-ScriptAnalyzer -Path $file.FullName -Severity @('Error', 'Warning') -ReportSummary
+              if ($results) {
+                  $allResults += $results
+                  foreach ($result in $results) {
+                      $severity = $result.Severity.ToString().ToLower()
+                      $msg = "$($result.RuleName): $($result.Message)"
+                      $filePath = $result.ScriptPath
+                      $line = $result.Line
+
+                      if ($severity -eq 'error') {
+                          Write-Host "::error file=$filePath,line=$line::$msg"
+                      } else {
+                          Write-Host "::warning file=$filePath,line=$line::$msg"
+                      }
+                  }
+              }
+          }
+
+          Write-Host ""
+          Write-Host "=== Summary ==="
+          Write-Host "Files analysed: $($files.Count)"
+          Write-Host "Issues found:   $($allResults.Count)"
+          Write-Host "Errors:         $(($allResults | Where-Object Severity -eq 'Error').Count)"
+          Write-Host "Warnings:       $(($allResults | Where-Object Severity -eq 'Warning').Count)"
+
+          $errors = $allResults | Where-Object Severity -eq 'Error'
+          if ($errors.Count -gt 0) {
+              Write-Error "PSScriptAnalyzer found $($errors.Count) error(s). Fix them before merging."
+              exit 1
+          }
+
+  # -----------------------------------------------------------------------
+  # Bicep build validation
+  # -----------------------------------------------------------------------
+  bicep-validate:
+    name: Bicep Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: |
+          az bicep install
+          az bicep version
+
+      - name: Build and lint Bicep files
+        run: |
+          files=$(find . -name '*.bicep' -type f)
+          if [ -z "$files" ]; then
+            echo "No Bicep files found"
+            exit 0
+          fi
+
+          errors=0
+          for file in $files; do
+            echo "Building: $file"
+            if ! az bicep build --file "$file" --stdout > /dev/null 2>&1; then
+              echo "::error file=$file::Bicep build failed"
+              errors=$((errors + 1))
+            fi
+          done
+
+          echo ""
+          echo "=== Summary ==="
+          echo "Files built: $(echo "$files" | wc -l | tr -d ' ')"
+          echo "Errors:      $errors"
+
+          if [ "$errors" -gt 0 ]; then
+            echo "Bicep validation failed with $errors error(s)."
+            exit 1
+          fi
